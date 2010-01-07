@@ -62,20 +62,26 @@
 
 (define-struct node (value dist left right) #:transparent)
 
-(define empty-pqueue #f)
+(define empty-pqueue (make-node 'empty-pqueue 0 null null))
+(define (empty-pqueue? q)
+  (eq? q empty-pqueue))
+
 (define (pqueue-insert tree value)
   (merge tree (make-simple-node value)))
-(define (pqueue-take tree)
-  (values (node-value tree)
-	  (merge (node-left tree) (node-right tree))))
+
+(define (pqueue-first tree)
+  (if tree (node-value tree)
+    (error "empty pqueue" 'pqueue-first)))
+(define (pqueue-rest tree)
+  (if tree (merge (node-left tree) (node-right tree))
+    (error "empty pqueue" 'pqueue-rest)))
 
 (define (safe-node-dist node)
-  (if node (node-dist node)
-    0))
+  (node-dist node))
 
 ;;; Ensure that the dist field accurately represents the tree at hand.
 (define (ensure-distance node)
-  (when node
+  (unless (empty-pqueue? node)
     (let ([left (node-left node)]
 	  [right (node-right node)])
       (ensure-distance left)
@@ -90,26 +96,26 @@
 	      (add1 (min (safe-node-dist left) (safe-node-dist right)))))))
 
 (define (ensure-tree node)
-  (when node
+  (unless (empty-pqueue? node)
     (ensure-distance node)
     (let ([left (node-left node)]
 	  [right (node-right node)])
       (ensure-tree left)
       (ensure-tree right)
-      (when left
+      (unless (empty-pqueue? left)
 	(assert < (node-value node) (node-value left)))
-      (when right
+      (unless (empty-pqueue? right)
 	(assert < (node-value node) (node-value right)))
       (assert >= (safe-node-dist left) (safe-node-dist right)))))
 
 (define (make-simple-node value)
-  (make-node value 1 #f #f))
+  (make-node value 1 empty-pqueue empty-pqueue))
 
 (define show
   (case-lambda
     [(node) (show node 0)]
     [(node depth)
-     (when node
+     (unless (empty-pqueue? node)
        (show (node-right node) (add1 depth))
        (spaces (* 3 depth))
        (printf "~a(~a)~%" (node-value node) (node-dist node))
@@ -122,26 +128,42 @@
 ;;; This comes from an imperative Java implementation off of
 ;;; Wikipedia, however it is functional.
 (define (merge a b)
+  (define (mm a b)
+    (let ([right (merge (node-right a) b)]
+	  [left (node-left a)])
+      (if left
+	(if (> (node-dist left) (node-dist right))
+	  (make-node (node-value a) (add1 (node-dist right)) left right)
+	  (make-node (node-value a) (add1 (node-dist left)) right left))
+	(make-node (node-value a) 1 right empty-pqueue))))
   (cond
-    [(not a) b]
-    [(not b) a]
+    [(empty-pqueue? a) b]
+    [(empty-pqueue? b) a]
     [(> (node-value a) (node-value b))
-     (merge b a)]
+     (mm b a)]
     [else
-      (let ([new-right (merge (node-right a) b)]
-	    [left (node-left a)])
-	(if left
-	  (let-values ([(nleft nright)
-			(if (> (node-dist left) (node-dist new-right))
-			  (values left new-right)
-			  (values new-right left))])
-	    (make-node (node-value a) (add1 (node-dist nright)) nleft nright))
-	  (make-node (node-value a) 1 new-right #f)))]))
+      (mm a b)]))
 
 (define (build seq)
   (for/fold ([pq empty-pqueue])
     ([item seq])
     (pqueue-insert pq item)))
+
+;;; Verify that the queue is ordered as we remove from it.  The queue
+;;; should not contain negative values.
+(define (check-queue queue)
+  (let loop ([last -1]
+	     [queue queue])
+    (unless (empty-pqueue? queue)
+      (let ([hd (pqueue-first queue)]
+	    [tl (pqueue-rest queue)])
+	(assert > hd last)
+	(loop hd tl)))))
+
+(define (build-and-check seq)
+  (define queue (build seq))
+  (ensure-tree queue)
+  (check-queue queue))
 
 (define (randoms n)
   (sort (build-list n (λ (x) x))
