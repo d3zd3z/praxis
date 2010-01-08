@@ -60,9 +60,23 @@
      (unless (op a b)
        (error "Assertion failure" 'op 'a 'b))]))
 
-(define-struct node (value dist left right) #:transparent)
+#|
+(define-syntax when
+  (syntax-rules ()
+    [(_ condition b0 body ...)
+     (if condition (begin b0 body ...) (void))]))
+(define-syntax unless
+  (syntax-rules ()
+    [(_ condition b0 body ...)
+     (if condition (void) (begin b0 body ...))]))
+(define (add1 x) (+ x 1))
+(define (sub1 x) (- x 1))
+|#
 
-(define empty-pqueue (make-node 'empty-pqueue 0 null null))
+(define-struct node (value dist left right) #:transparent)
+;(define-structure node value dist left right)
+
+(define empty-pqueue (make-node 'empty-pqueue 0 '() '()))
 (define (empty-pqueue? q)
   (eq? q empty-pqueue))
 
@@ -111,16 +125,14 @@
 (define (make-simple-node value)
   (make-node value 1 empty-pqueue empty-pqueue))
 
-(define show
-  (case-lambda
-    [(node) (show node 0)]
-    [(node depth)
+(define (show node)
+  (define (ishow node depth)
      (unless (empty-pqueue? node)
        (show (node-right node) (add1 depth))
        (spaces (* 3 depth))
        (printf "~a(~a)~%" (node-value node) (node-dist node))
-       (show (node-left node) (add1 depth))
-       )]))
+       (show (node-left node) (add1 depth))))
+  (ishow node 0))
 
 (define (spaces n)
   (display (make-string n #\space)))
@@ -145,9 +157,15 @@
       (mm a b)]))
 
 (define (build seq)
-  (for/fold ([pq empty-pqueue])
-    ([item seq])
-    (pqueue-insert pq item)))
+  (let loop ([seq seq]
+	     [pq empty-pqueue])
+    (if (pair? seq)
+      (loop (cdr seq)
+	    (pqueue-insert pq (car seq)))
+      pq)))
+;  (for/fold ([pq empty-pqueue])
+;    ([item seq])
+;    (pqueue-insert pq item)))
 
 ;;; Verify that the queue is ordered as we remove from it.  The queue
 ;;; should not contain negative values.
@@ -165,7 +183,29 @@
   (ensure-tree queue)
   (check-queue queue))
 
+(define (make-park-miller seed)
+  (lambda ()
+    (set! seed (remainder (* seed 16807) #x7fffffff))
+    seed))
+
 (define (randoms n)
-  (sort (build-list n (λ (x) x))
-	(λ (a b) (zero? (random 2)))))
+  (define v (make-vector n #f))
+  (define rnd (make-park-miller 1))
+  (let loop ([pos 0])
+    (when (< pos n)
+      (vector-set! v pos pos)
+      (loop (add1 pos))))
+  (let loop ([pos 0])
+    (when (< pos n)
+      (let* ([other (remainder (rnd) n)]
+	     [tmp (vector-ref v pos)])
+	(vector-set! v pos (vector-ref v other))
+	(vector-set! v other tmp))
+      (loop (add1 pos))))
+  (vector->list v))
+
+;  (sort (build-list n (λ (x) x))
+;	(λ (a b) (zero? (random 2)))))
 (define (n v) (make-simple-node v))
+
+(time (build-and-check (randoms 100000)))
