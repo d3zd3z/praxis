@@ -53,7 +53,15 @@
 
 ;;; And a sample "extreme" problem.
 (define (main-extreme)
-  (solve-work (make-constraints "..9748...7.........2.1.9.....7...24..64.1.59..98...3.....8.3.2.........6...2759..")
+  (solve-work (make-constraints "1.......2.9.4...5...6...7...5.9.3.......7.......85..4.7.....6...3...9.8...2.....1")
+	      print-solution))
+
+(define (main-hardest)
+  (solve-work (make-constraints "7......1946.19.......6827.4.9......7...3..4.5..67.......1......2...74......2..3..")
+	      print-solution))
+
+(define (main-wild)
+  (solve-work (make-constraints "002090107038600000400000000000005000009010300000400000000000004000007920806030700")
 	      print-solution))
 
 ;;; Build the constraints for an n^2 by n^2 sudoku puzzle.
@@ -309,9 +317,11 @@
 
 ;;; Solve the given DLX system, calling take answer with the list of
 ;;; rows that satisfies.
+(define tries 0)
 (define (solve-work root take-answer)
   (define (solve answer)
     (define col (find-smallest-column root))
+    (set! tries (add1 tries))
     (if col
       (begin
 	(cover-column col)
@@ -322,7 +332,9 @@
 	  (for-each-node (cell row 'horizontal 'prior)
 	    (uncover-column (ncell-column cell))))
 	(uncover-column col))
-      (take-answer answer)))
+      (begin
+	(printf "~a tries~%" tries)
+	(take-answer answer))))
   (solve '()))
 
 ;;; Decode a column into a nice list of the rows contained in it.
